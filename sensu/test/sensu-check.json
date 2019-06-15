@@ -1,0 +1,10 @@
+{
+  "command": "whoami",
+  "subscribers": [
+    "demo"
+  ],
+  "interval": 60,
+  "name": "sensu-website",
+  "issued": 1458934742,
+  "duration": 0.637
+}
