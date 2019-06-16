@@ -1,10 +1,13 @@
 package sensu
 
 import (
+	"bufio"
+	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/sensu/sensu-go/command"
 	"github.com/sensu/sensu-go/types"
 	"os"
-	"os/exec"
 )
 
 type GoCheck struct {
@@ -46,15 +49,43 @@ func (goCheck *GoCheck) goCheckWorkflow(_ []string) (int, error) {
 	// Execute check logic
 	err = goCheck.executeFunction(goCheck.sensuCheck)
 	if err != nil {
-		return 1, fmt.Errorf("error executing handler: %s", err)
+		return 1, fmt.Errorf("error executing check: %s", err)
 	}
 
 	return 0, nil
 }
 
 func executeSensuCheck(check *types.Check) error {
-	output, _ := exec.Command(check.Command).Output()
+	// Inject the dependencies into PATH, LD_LIBRARY_PATH & CPATH so that they
+	// are availabe when when the command is executed.
+	ex := command.ExecutionRequest{
+		Command: check.Command,
+		Name:    check.Name,
+	}
+
+	// If stdin is true, add JSON event data to command execution.
+	if check.Stdin {
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		ex.Input = string(input)
+	}
+
+	checkExec, _ := command.NewExecutor().Execute(context.Background(), ex)
+	output := checkExec.Output
+
+	duration := checkExec.Duration
+	status := uint32(checkExec.Status)
+
 	result := string(output)
-	fmt.Println(result)
+
+	attributeMap := make(map[string]interface{})
+	attributeMap["status"] = status
+	attributeMap["output"] = result
+	attributeMap["duration"] = duration
+
+	sensuCheckJson := make(map[string]interface{})
+	sensuCheckJson["check"] = attributeMap
+	finalOuput, _ := json.Marshal(&sensuCheckJson)
+	fmt.Println(string(finalOuput[:]))
 	return nil
 }

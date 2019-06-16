@@ -1,5 +1,5 @@
 {
-  "command": "whoami",
+  "command": "echo",
   "subscribers": [
     "demo"
   ],
@@ -8,5 +8,6 @@
     "name": "sensu-website"
   },
   "issued": 1458934742,
-  "duration": 0.637
+  "duration": 0.637,
+  "stdin":true
 }

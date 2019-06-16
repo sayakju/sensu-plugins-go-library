@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/sensu/sensu-go/types"
 	"github.com/stretchr/testify/assert"
+	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -27,7 +28,7 @@ func TestNewGoCheck(t *testing.T) {
 	assert.NotNil(t, goCheck.validationFunction)
 	assert.NotNil(t, goCheck.executeFunction)
 	assert.Nil(t, goCheck.sensuCheck)
-	assert.Equal(t, os.Stdin, goCheck.eventReader)
+	assert.Equal(t, os.Stdin, goCheck.checkReader)
 }
 
 func goCheckExecuteUtil(
@@ -36,14 +37,9 @@ func goCheckExecuteUtil(
 	checkFile string,
 	cmdLineArgs []string,
 	validationFunction func(check *types.Check) error,
-	expectedValue1 interface{},
-	expectedValue2 interface{},
-	expectedValue3 interface{},
 ) (int, string) {
-	values := handlerValues{}
-	options := getHandlerOptions(&values)
 
-	goCheck := NewGoCheck(checkConfig, options, validationFunction)
+	goCheck := NewGoCheck(checkConfig, nil, validationFunction)
 
 	// Simulate the command line arguments if necessary
 	if len(cmdLineArgs) > 0 {
@@ -55,7 +51,7 @@ func goCheckExecuteUtil(
 	// Replace stdin reader with file reader and exitFunction with our own so we can know the exit status
 	var exitStatus int
 	var errorStr = ""
-	goCheck.eventReader = getFileReader(checkFile)
+	goCheck.checkReader = getFileReader(checkFile)
 	goCheck.exitFunction = func(i int) {
 		exitStatus = i
 	}
@@ -64,25 +60,36 @@ func goCheckExecuteUtil(
 	}
 	goCheck.Execute()
 
-	assert.Equal(t, expectedValue1, values.arg1)
-	assert.Equal(t, expectedValue2, values.arg2)
-	assert.Equal(t, expectedValue3, values.arg3)
-
 	return exitStatus, errorStr
 }
 
-// Test check override
+// Test check
 func TestGoCheck_Execute(t *testing.T) {
-	var validateCalled, executeCalled bool
+	var validateCalled bool
 	clearEnvironment()
 	exitStatus, _ := goCheckExecuteUtil(t, &defaultHandlerConfig, "test/sensu-check.json", nil,
-		func(event *types.Check) error {
+		func(check *types.Check) error {
 			validateCalled = true
-			assert.NotNil(t, event)
+			assert.NotNil(t, check)
 			return nil
-		},
-		"value-check1", uint64(1357), false)
+		})
 	assert.Equal(t, 0, exitStatus)
 	assert.True(t, validateCalled)
-	assert.True(t, executeCalled)
+}
+
+// Test check
+func TestGoCheck_Execute1(t *testing.T) {
+	var validateCalled bool
+	clearEnvironment()
+	file, _ := ioutil.TempFile(os.TempDir(), "test")
+	file.WriteString(string("hello world"))
+	os.Stdin = file
+	exitStatus, _ := goCheckExecuteUtil(t, &defaultHandlerConfig, "test/sensu-check1.json", nil,
+		func(check *types.Check) error {
+			validateCalled = true
+			assert.NotNil(t, check)
+			return nil
+		})
+	assert.Equal(t, 0, exitStatus)
+	assert.True(t, validateCalled)
 }
