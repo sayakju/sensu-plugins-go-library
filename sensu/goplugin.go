@@ -45,15 +45,11 @@ type basePlugin struct {
 	config                 *PluginConfig
 	options                []*PluginConfigOption
 	sensuEvent             *types.Event
-	sensuCheck             *types.Check
 	eventReader            io.Reader
-	checkReader            io.Reader
 	pluginWorkflowFunction func([]string) (int, error)
 	cmdArgs                *args.Args
 	readEvent              bool
-	readCheck              bool
 	eventMandatory         bool
-	checkMandatory         bool
 	configurationOverrides bool
 	exitStatus             int
 	errorExitStatus        int
@@ -83,31 +79,6 @@ func (goPlugin *basePlugin) readSensuEvent() error {
 	}
 
 	goPlugin.sensuEvent = sensuEvent
-	return nil
-}
-
-func (goPlugin *basePlugin) readSensuCheck() error {
-	checkJSON, err := ioutil.ReadAll(goPlugin.checkReader)
-	if err != nil {
-		if goPlugin.checkMandatory {
-			return fmt.Errorf("Failed to read STDIN: %s", err)
-		} else {
-			// if event is not mandatory return without going any further
-			return nil
-		}
-	}
-
-	sensuCheck := &types.Check{}
-	err = json.Unmarshal(checkJSON, sensuCheck)
-	if err != nil {
-		return fmt.Errorf("Failed to unmarshal STDIN data: %s", err)
-	}
-
-	if err = validateCheck(sensuCheck); err != nil {
-		return err
-	}
-
-	goPlugin.sensuCheck = sensuCheck
 	return nil
 }
 
@@ -150,15 +121,6 @@ func (goPlugin *basePlugin) cobraExecuteFunction(args []string) error {
 	// Read the Sensu event if required
 	if goPlugin.readEvent {
 		err := goPlugin.readSensuEvent()
-		if err != nil {
-			goPlugin.exitStatus = goPlugin.errorExitStatus
-			return err
-		}
-	}
-
-	// Read the Sensu check if required
-	if goPlugin.readCheck {
-		err := goPlugin.readSensuCheck()
 		if err != nil {
 			goPlugin.exitStatus = goPlugin.errorExitStatus
 			return err
@@ -211,10 +173,6 @@ func validateEvent(event *types.Event) error {
 	}
 
 	return event.Validate()
-}
-
-func validateCheck(check *types.Check) error {
-	return check.Validate()
 }
 
 func setOptionValue(option *PluginConfigOption, valueStr string) error {
