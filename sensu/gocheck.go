@@ -1,28 +1,31 @@
 package sensu
 
 import (
-	"context"
 	"fmt"
-	"github.com/sensu/sensu-go/command"
+	"github.com/sensu/sensu-go/types"
+	"os"
 )
 
 type GoCheck struct {
 	basePlugin
-	validationFunction func() error
-	command            string
+	validationFunction func(check *types.Check) error
+	executeFunction    func(event *types.Check) error
 }
 
 func NewGoCheck(config *PluginConfig, options []*PluginConfigOption,
-	validationFunction func() error, command string) *GoCheck {
+	validationFunction func(check *types.Check) error, executeFunction func(event *types.Check) error) *GoCheck {
 	goCheck := &GoCheck{
 		basePlugin: basePlugin{
 			config:          config,
 			options:         options,
-			readEvent:       false,
+			sensuCheck:      nil,
+			checkReader:     os.Stdin,
+			readCheck:       true,
+			checkMandatory:  true,
 			errorExitStatus: 1,
 		},
 		validationFunction: validationFunction,
-		command:            command,
+		executeFunction:    executeFunction,
 	}
 
 	goCheck.pluginWorkflowFunction = goCheck.goCheckWorkflow
@@ -31,24 +34,19 @@ func NewGoCheck(config *PluginConfig, options []*PluginConfigOption,
 	return goCheck
 }
 
-// Executes the handler's workflow
+// Executes the check's workflow
 func (goCheck *GoCheck) goCheckWorkflow(_ []string) (int, error) {
 	// Validate input using validateFunction
-	err := goCheck.validationFunction()
+	err := goCheck.validationFunction(goCheck.sensuCheck)
 	if err != nil {
 		return 1, fmt.Errorf("error validating input: %s", err)
 	}
 
-	ex := command.ExecutionRequest{
-		Command: goCheck.command,
-	}
-
-	checkExec, err := command.NewExecutor().Execute(context.Background(), ex)
+	// Execute check logic using executeFunction
+	err = goCheck.executeFunction(goCheck.sensuCheck)
 	if err != nil {
-		return 2, err
+		return 1, fmt.Errorf("error executing check: %s", err)
 	}
-
-	fmt.Println(checkExec.Output)
 
 	return 0, nil
 }
