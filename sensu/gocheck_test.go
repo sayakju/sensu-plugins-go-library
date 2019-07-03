@@ -18,10 +18,10 @@ var (
 )
 
 func TestNewGoCheck(t *testing.T) {
-	goCheck := NewGoCheck(&defaultCheckConfig, nil, func(check *types.Check) error {
+	goCheck := NewGoCheck(&defaultCheckConfig, nil, func(check *types.Check, entity *types.Entity) error {
 		return nil
-	}, func(check *types.Check) error {
-		return nil
+	}, func(check *types.Check, entity *types.Entity) (int, error) {
+		return 0, nil
 	})
 
 	assert.NotNil(t, goCheck)
@@ -35,7 +35,7 @@ func TestNewGoCheck(t *testing.T) {
 }
 
 func goCheckExecuteUtil(t *testing.T, checkConfig *PluginConfig, checkFile string, cmdLineArgs []string,
-	validationFunction func(check *types.Check) error, executeFunction func(*types.Check) error) (int, string) {
+	validationFunction func(check *types.Check, entity *types.Entity) error, executeFunction func(*types.Check, *types.Entity) (int, error)) (int, string) {
 
 	goCheck := NewGoCheck(checkConfig, nil, validationFunction, executeFunction)
 
@@ -66,14 +66,14 @@ func TestGoCheck_Execute(t *testing.T) {
 	var validateCalled, executeCalled bool
 	clearEnvironment()
 	exitStatus, _ := goCheckExecuteUtil(t, &defaultCheckConfig, "test/sensu-check.json", nil,
-		func(check *types.Check) error {
+		func(check *types.Check, entity *types.Entity) error {
 			validateCalled = true
 			assert.NotNil(t, check)
 			return nil
-		}, func(check *types.Check) error {
+		}, func(check *types.Check, entity *types.Entity) (int, error) {
 			executeCalled = true
 			assert.NotNil(t, check)
-			return nil
+			return 0, nil
 		})
 	assert.Equal(t, 0, exitStatus)
 	assert.True(t, validateCalled)

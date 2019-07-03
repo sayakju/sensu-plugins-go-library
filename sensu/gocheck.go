@@ -8,19 +8,22 @@ import (
 
 type GoCheck struct {
 	basePlugin
-	validationFunction func(check *types.Check) error
-	executeFunction    func(event *types.Check) error
+	validationFunction func(check *types.Check, entity *types.Entity) error
+	executeFunction    func(event *types.Check, entity *types.Entity) (int, error)
 }
 
 func NewGoCheck(config *PluginConfig, options []*PluginConfigOption,
-	validationFunction func(check *types.Check) error, executeFunction func(event *types.Check) error) *GoCheck {
+	validationFunction func(check *types.Check, entity *types.Entity) error, executeFunction func(event *types.Check, entity *types.Entity) (int, error)) *GoCheck {
 	goCheck := &GoCheck{
 		basePlugin: basePlugin{
 			config:          config,
 			options:         options,
 			sensuCheck:      nil,
+			sensuEntity:     nil,
 			checkReader:     os.Stdin,
+			entityReader:    os.Stdin,
 			readCheck:       true,
+			readEntity:      true,
 			checkMandatory:  true,
 			errorExitStatus: 1,
 		},
@@ -37,16 +40,11 @@ func NewGoCheck(config *PluginConfig, options []*PluginConfigOption,
 // Executes the check's workflow
 func (goCheck *GoCheck) goCheckWorkflow(_ []string) (int, error) {
 	// Validate input using validateFunction
-	err := goCheck.validationFunction(goCheck.sensuCheck)
+	err := goCheck.validationFunction(goCheck.sensuCheck, goCheck.sensuEntity)
 	if err != nil {
-		return 1, fmt.Errorf("error validating input: %s", err)
+		return -1, fmt.Errorf("error validating input: %s", err)
 	}
 
 	// Execute check logic using executeFunction
-	err = goCheck.executeFunction(goCheck.sensuCheck)
-	if err != nil {
-		return 1, fmt.Errorf("error executing check: %s", err)
-	}
-
-	return 0, nil
+	return goCheck.executeFunction(goCheck.sensuCheck, goCheck.sensuEntity)
 }

@@ -46,14 +46,18 @@ type basePlugin struct {
 	options                []*PluginConfigOption
 	sensuEvent             *types.Event
 	sensuCheck             *types.Check
+	sensuEntity            *types.Entity
 	eventReader            io.Reader
 	checkReader            io.Reader
+	entityReader           io.Reader
 	pluginWorkflowFunction func([]string) (int, error)
 	cmdArgs                *args.Args
 	readEvent              bool
 	readCheck              bool
+	readEntity             bool
 	eventMandatory         bool
 	checkMandatory         bool
+	entityMandatory        bool
 	configurationOverrides bool
 	exitStatus             int
 	errorExitStatus        int
@@ -111,6 +115,31 @@ func (goPlugin *basePlugin) readSensuCheck() error {
 	return nil
 }
 
+func (goPlugin *basePlugin) readSensuEntity() error {
+	entityJSON, err := ioutil.ReadAll(goPlugin.entityReader)
+	if err != nil {
+		if goPlugin.entityMandatory {
+			return fmt.Errorf("Failed to read STDIN: %s", err)
+		} else {
+			// if entity is not mandatory return without going any further
+			return nil
+		}
+	}
+
+	sensuEntity := &types.Entity{}
+	err = json.Unmarshal(entityJSON, sensuEntity)
+	if err != nil {
+		return fmt.Errorf("Failed to unmarshal STDIN data: %s", err)
+	}
+
+	if err = validateEntity(sensuEntity); err != nil {
+		return err
+	}
+
+	goPlugin.sensuEntity = sensuEntity
+	return nil
+}
+
 func (goPlugin *basePlugin) initPlugin() {
 	goPlugin.cmdArgs = args.NewArgs(goPlugin.config.Name, goPlugin.config.Short, goPlugin.cobraExecuteFunction)
 	goPlugin.exitFunction = os.Exit
@@ -159,6 +188,15 @@ func (goPlugin *basePlugin) cobraExecuteFunction(args []string) error {
 	// Read the Sensu check if required
 	if goPlugin.readCheck {
 		err := goPlugin.readSensuCheck()
+		if err != nil {
+			goPlugin.exitStatus = goPlugin.errorExitStatus
+			return err
+		}
+	}
+
+	// Read the Sensu entity if required
+	if goPlugin.readEntity {
+		err := goPlugin.readSensuEntity()
 		if err != nil {
 			goPlugin.exitStatus = goPlugin.errorExitStatus
 			return err
@@ -216,6 +254,11 @@ func validateEvent(event *types.Event) error {
 func validateCheck(check *types.Check) error {
 	//TODO: Add further check validation if needed
 	return check.Validate()
+}
+
+func validateEntity(entity *types.Entity) error {
+	//TODO: Add further entity validation if needed
+	return entity.Validate()
 }
 
 func setOptionValue(option *PluginConfigOption, valueStr string) error {
