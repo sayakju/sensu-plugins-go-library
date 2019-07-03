@@ -34,7 +34,7 @@ func TestNewGoCheck(t *testing.T) {
 	assert.Equal(t, os.Stdin, goCheck.checkReader)
 }
 
-func goCheckExecuteUtil(t *testing.T, checkConfig *PluginConfig, checkFile string, cmdLineArgs []string,
+func goCheckExecuteUtil(t *testing.T, checkConfig *PluginConfig, checkFile string, entityFile string, cmdLineArgs []string,
 	validationFunction func(check *types.Check, entity *types.Entity) error, executeFunction func(*types.Check, *types.Entity) (int, error)) (int, string) {
 
 	goCheck := NewGoCheck(checkConfig, nil, validationFunction, executeFunction)
@@ -50,6 +50,7 @@ func goCheckExecuteUtil(t *testing.T, checkConfig *PluginConfig, checkFile strin
 	var exitStatus int
 	var errorStr = ""
 	goCheck.checkReader = getFileReader(checkFile)
+	goCheck.entityReader = getFileReader(entityFile)
 	goCheck.exitFunction = func(i int) {
 		exitStatus = i
 	}
@@ -65,7 +66,7 @@ func goCheckExecuteUtil(t *testing.T, checkConfig *PluginConfig, checkFile strin
 func TestGoCheck_Execute(t *testing.T) {
 	var validateCalled, executeCalled bool
 	clearEnvironment()
-	exitStatus, _ := goCheckExecuteUtil(t, &defaultCheckConfig, "test/sensu-check.json", nil,
+	exitStatus, _ := goCheckExecuteUtil(t, &defaultCheckConfig, "test/sensu-check.json", "", nil,
 		func(check *types.Check, entity *types.Entity) error {
 			validateCalled = true
 			assert.NotNil(t, check)
