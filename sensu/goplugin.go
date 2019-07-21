@@ -48,8 +48,7 @@ type basePlugin struct {
 	sensuCheck             *types.Check
 	sensuEntity            *types.Entity
 	eventReader            io.Reader
-	checkReader            io.Reader
-	entityReader           io.Reader
+	checkEntityReader      io.Reader
 	pluginWorkflowFunction func([]string) (int, error)
 	cmdArgs                *args.Args
 	readEvent              bool
@@ -63,6 +62,11 @@ type basePlugin struct {
 	errorExitStatus        int
 	exitFunction           func(int)
 	errorLogFunction       func(format string, a ...interface{})
+}
+
+type checkEntity struct {
+	Check  *types.Check
+	Entity *types.Entity
 }
 
 func (goPlugin *basePlugin) readSensuEvent() error {
@@ -90,53 +94,45 @@ func (goPlugin *basePlugin) readSensuEvent() error {
 	return nil
 }
 
-func (goPlugin *basePlugin) readSensuCheck() error {
-	checkJSON, err := ioutil.ReadAll(goPlugin.checkReader)
+func (goPlugin *basePlugin) readSensuCheckEntity() error {
+	checkEntityJSON, err := ioutil.ReadAll(goPlugin.checkEntityReader)
 	if err != nil {
-		if goPlugin.checkMandatory {
+		if goPlugin.checkMandatory || goPlugin.entityMandatory {
 			return fmt.Errorf("Failed to read STDIN: %s", err)
 		} else {
-			// if check is not mandatory return without going any further
+			// if both check and entity are not mandatory return without going any further
 			return nil
 		}
 	}
 
-	sensuCheck := &types.Check{}
-	err = json.Unmarshal(checkJSON, sensuCheck)
+	sensuCheckEntity := &checkEntity{}
+	err = json.Unmarshal(checkEntityJSON, sensuCheckEntity)
 	if err != nil {
 		return fmt.Errorf("Failed to unmarshal STDIN data: %s", err)
 	}
 
-	if err = validateCheck(sensuCheck); err != nil {
-		return err
+	if goPlugin.checkMandatory && sensuCheckEntity.Check == nil {
+		return fmt.Errorf("Mandatory check data is not present")
 	}
 
-	goPlugin.sensuCheck = sensuCheck
-	return nil
-}
+	if goPlugin.entityMandatory && sensuCheckEntity.Entity == nil {
+		return fmt.Errorf("Mandatory entity data is not present")
+	}
 
-func (goPlugin *basePlugin) readSensuEntity() error {
-	entityJSON, err := ioutil.ReadAll(goPlugin.entityReader)
-	if err != nil {
-		if goPlugin.entityMandatory {
-			return fmt.Errorf("Failed to read STDIN: %s", err)
-		} else {
-			// if entity is not mandatory return without going any further
-			return nil
+	if sensuCheckEntity.Check != nil {
+		if err = validateCheck(sensuCheckEntity.Check); err != nil {
+			return err
 		}
 	}
 
-	sensuEntity := &types.Entity{}
-	err = json.Unmarshal(entityJSON, sensuEntity)
-	if err != nil {
-		return fmt.Errorf("Failed to unmarshal STDIN data: %s", err)
+	if sensuCheckEntity.Entity != nil {
+		if err = validateEntity(sensuCheckEntity.Entity); err != nil {
+			return err
+		}
 	}
 
-	if err = validateEntity(sensuEntity); err != nil {
-		return err
-	}
-
-	goPlugin.sensuEntity = sensuEntity
+	goPlugin.sensuCheck = sensuCheckEntity.Check
+	goPlugin.sensuEntity = sensuCheckEntity.Entity
 	return nil
 }
 
@@ -185,18 +181,9 @@ func (goPlugin *basePlugin) cobraExecuteFunction(args []string) error {
 		}
 	}
 
-	// Read the Sensu check if required
-	if goPlugin.readCheck {
-		err := goPlugin.readSensuCheck()
-		if err != nil {
-			goPlugin.exitStatus = goPlugin.errorExitStatus
-			return err
-		}
-	}
-
-	// Read the Sensu entity if required
-	if goPlugin.readEntity {
-		err := goPlugin.readSensuEntity()
+	// Read the Sensu check and entity if required
+	if goPlugin.readCheck || goPlugin.readEntity {
+		err := goPlugin.readSensuCheckEntity()
 		if err != nil {
 			goPlugin.exitStatus = goPlugin.errorExitStatus
 			return err
